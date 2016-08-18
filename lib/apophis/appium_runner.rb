@@ -15,6 +15,7 @@ class AppiumRunner
   end
 
   def available?(port)
+    return false unless port
     !!find(port)
   end
 
@@ -35,9 +36,11 @@ class AppiumRunner
     appiums.find{|app| app[:url] =~ /:#{port}/}
   end
 
-  def launch_and_wait(port=4500, timeout=20)
-    port = find_available_port(port)
-    Process.spawn("appium -p #{port} -bp #{port+1} > /dev/null 2>&1")
+  def launch_and_wait(port=nil, timeout=20)
+    port = port || find_available_port(4500)
+
+    #we'll use the env variable later to locate this process (`ps -p <PID> -wwwE`)
+    Process.spawn("APOPHIS_TAG=#{port} appium -p #{port} -bp #{port+1} > /dev/null 2>&1")
     DottyTimeout.timeout(timeout){ available?(port) }
 
     { port: port }
@@ -49,7 +52,7 @@ class AppiumRunner
         res = JSON.parse(open("#{ candidate }/status").read)
         !!res["value"]
       end
-    rescue
+    rescue Exception => _
       false
     end
   end

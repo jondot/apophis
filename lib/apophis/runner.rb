@@ -16,33 +16,33 @@ module Apophis
       gm = GenymotionRunner.new
       gm.doctor!
 
-      if caps[:runner] && caps[:runner][:genymotion] && gm.devices.empty?
+      caps[:runner] ||= {}
+      runner = caps[:runner]
+
+      if runner && runner[:genymotion] && gm.devices.empty?
         @log.info '---> no android device found, launching genymotion...'
-        gm.launch(caps[:runner][:genymotion])
+        gm.launch(runner[:genymotion])
         @log.info '---> devices available:'
         @log.info gm.devices.join("\n")
       end
 
+      port = runner ? runner[:port] : nil
       ar = AppiumRunner.new
       ar.doctor!
 
-      appiums = ar.appiums
-      @log.info "appiums: #{appiums}"
-      if appiums.size > 0
-        @log.info '---> being a douch and killing all running appiums.'
-        @log.info '---> improve me later to map caps->device->device uuid->appium->appium session.'
-        appiums.each do |app|
-          @log.info "---> killing appium #{ app }"
-          ar.kill_and_wait(app[:port])
-        end
+      if ar.available?(port)
+        @log.info "--> killing appium on port #{port}"
+        ar.kill_and_wait(port)
       end
 
-      unless ar.any?
-        @log.info '---> no appium found. launching...'
-        launchinfo = ar.launch_and_wait
-        caps[:appium_lib][:port] = launchinfo[:port]
-        @log.info "---> done. wiring caps to appium #{launchinfo}"
-      end
+      @log.info '---> launching a new appium...'
+      launchinfo = ar.launch_and_wait
+      # this is the magic: map the fresh appium port to this current test
+      caps[:appium_lib][:port] = launchinfo[:port]
+      caps[:runner][:port] = launchinfo[:port]
+
+      @log.info "---> done. wiring caps to appium #{launchinfo}"
+      @log.info caps
 
 
       @log.info "---> starting driver..."
@@ -57,8 +57,18 @@ module Apophis
     # #promote_appium_methods rely on. We'll have no
     # choice but chip-in on this nonsense when we
     # want to do cleanups etc.
-    def cleanup
+    def cleanup(caps=nil)
       @log.info '---> cleaning up...'
+      if caps
+        port = caps[:runner][:port]
+        ar = AppiumRunner.new
+
+        if ar.available?(port)
+          @log.info "--> killing appium on port #{port}"
+          ar.kill_and_wait(port)
+        end
+      end
+
       $driver.driver_quit if $driver
       @log.info '---> done.'
     end
